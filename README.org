@@ -1,0 +1,49 @@
+#+TITLE: Compare Sparse-Merkle-Tries (SMTs)
+#+AUTHOR: Francis Lim
+#+EMAIL: thyeem@gmail.com
+#+STARTUP: showall
+
+Here are three kinds of =Sparse Merkle Tries (SMTs)= I purely implemented in =python=. In order to easily compare the characteristics of each tree, I implemented it to be super simple and straightforward.
+
+- =Vanilla SMT=, a standard /Sparse Merkle Trie/ without any optimizations.
+
+- =Cached SMT= caches the hash values of each depth of the =Vanilla SMT=. This modification reduces the number of DB accesses for reading.
+
+- =monotree=, a pure-python implementation of =monotree written in Rust= (https://github.com/thyeem/monotree). Optimization in =monotree= is mainly to compress the path as much as possible to reduce the number of DB accesses in both read and write.
+
+** Tl;dr
+=Vanilla SMT= constantly reads and writes /256 times/ (/tree depth/) each insertion, whereas =monotree= *requires only 13.29 times on average, per one insertion, in both read/write*. (when updating 10,000 entries)
+
+** Performance
+Go test each trie based on the conditions following:
+
+- Use 32-byte (or 256-bit) length key and Blake2b hash function
+- Update each empty trie using 10,000 random key-leaf bytes pairs
+- Consider each case: when (1) the set of keys is sorted and (2) the set of keys is not sorted
+
+#+begin_src shell
+$ python3 perf.py
+#+end_src
+
+
+#+attr_html: :width 500px
+[[./test.png]]
+
+
+** Summary
+
+#+CAPTION: Table with aligned columns
+| label | name        | structure | key-sorted? | elapsed | # of read  | # of write  | root       |
+|-------+-------------+-----------+-------------+---------+------------+-------------+------------|
+| 1-a   | Vanilla SMT | static    | x           | 6.06 s  | 2,560,000  | 2,560,256   | 8539..5fec |
+| 1-b   | Vanilla SMT | static    | o           | 5.99 s  | 2,560,000  | 2,560,256   | 8539..5fec |
+| 2-a   | Cached SMT  | static    | x           | 3.90 s  | 131,840    | 2,560,256   | 8539..5fec |
+| 2-b   | Cached SMT  | static    | o           | 3.88 s  | 131,840    | 2,560,256   | 8539..5fec |
+| 3-a   | Monotree    | dynamic   | x           | 1.26 s  | *111,784*  | *121,784*   | a701..c34c |
+| 3-b   | Monotree    | dynamic   | o           | 0.74 s  | *63,066*   | *73,066*    | a701..c34c |
+
+- =Vanilla SMT= always reads and writes /256 times/ (/tree depth/) to insert an entry. =2,560,256 = 256 * 10,000 + 256=. The last term /256/ happens when initializing the tree.
+- =Cached SMT= reads only =log2 (N)= depth, on average. =log2 (10000) ~ 13.29=. =log2 (10000) * 10,000 = 132,877 ~ 131,840=.
+- =monotree= reads and writes only =log2(N)= depth on average in both write and read.
+- Since one write operation indicates one =hash_fn()= call, it takes much more time when writing than when reading. Therefore, optimization in writing is more meaningful than optimization in reading.
+- If =monotree= had 4-bit nibble nodes, /3.32 times/ of read/write would be sufficient when inserting an entry instead of /13.29 times/ (=log16(10000) = 3.32=), although it may have to sacrifice spatial complexity.
