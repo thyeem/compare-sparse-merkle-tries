@@ -12,7 +12,12 @@ Here are three kinds of =Sparse Merkle Tries (SMTs)= I purely implemented in =py
 - =monotree=, a pure-python implementation of =monotree written in Rust= (https://github.com/thyeem/monotree). Optimization in =monotree= is mainly to compress the path as much as possible to reduce the number of DB accesses in both read and write.
 
 ** Tl;dr
-=Vanilla SMT= constantly reads and writes /256 times/ (/tree depth/) each insertion, whereas =monotree= *requires only 13.29 times on average, per one insertion, in both read/write*. (when updating 10,000 entries)
+
+(when updating 10,000 entries)
+
+- =Vanilla SMT= constantly reads and writes /256 tree depth/ each insertion
+- Whereas, =monotree= requires only /~13.29 (or log2 (10,000)) tree-depth/ on average, per one insertion, in both read/write.
+- Inserting sorted keys into the monotree improves it further by up to =40%=.
 
 ** Performance
 Go test each trie based on the conditions following:
@@ -33,7 +38,7 @@ $ python3 perf.py
 ** Summary
 
 #+CAPTION: Table with aligned columns
-| label | name        | structure | key-sorted? | elapsed | # of read  | # of write  | root       |
+| label | name        | structure | key-sorted? | elapsed | # of read  | # of write  | final root |
 |-------+-------------+-----------+-------------+---------+------------+-------------+------------|
 | 1-a   | Vanilla SMT | static    | x           | 6.06 s  | 2,560,000  | 2,560,256   | 8539..5fec |
 | 1-b   | Vanilla SMT | static    | o           | 5.99 s  | 2,560,000  | 2,560,256   | 8539..5fec |
