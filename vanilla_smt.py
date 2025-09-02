@@ -1,50 +1,21 @@
-import hashlib
-import itertools
-
-from database import RocksDB
+from utils import *
 
 
-def bytes_to_int(x):
-    return int.from_bytes(x, "big")
-
-
-def int_to_bytes(x, byte=32):
-    return x.to_bytes(byte, "big")
-
-
-def blake2b(nbyte=32):
-    def f(x):
-        return hashlib.blake2b(x, digest_size=nbyte).digest()
-
-    return f
-
-
-def chunk_iterable(iterable, size):
-    it = iter(iterable)
-    while True:
-        chunk = tuple(itertools.islice(it, size))
-        if not chunk:
-            break
-        yield chunk
-
-
-class VanillaSMT(object):
+class VanillaSMT:
     """A pure-python implementation of Vanilla Sparse Merkle Tree (SMT).
 
     This is a straightforward standard Sparse Merkle Tree without any optimizations.
     """
 
-    def __init__(self, hash_bytes=32, db=None, hash_fn=None):
-        """ RocksDB will be used when not provided keyword 'db' """
-
-        self.db = db or RocksDB()
+    def __init__(self, hash_bytes=32, hash_fn=None):
         self.HASH_BYTES = hash_bytes
         self.HASH_BITS = hash_bytes << 3
         self.hash = hash_fn or blake2b(hash_bytes)
-        self.nil = b"" * hash_bytes
+        self.new()
 
-    def new_tree(self):
-        h = self.nil
+    def new(self):
+        self.db = Database()
+        h = NIL
         for _ in range(self.HASH_BITS):
             hh = h + h
             h = self.hash(hh)
@@ -80,7 +51,7 @@ class VanillaSMT(object):
             bits <<= 1
         return proof
 
-    def update(self, root, key, leaf):
+    def insert(self, root, key, leaf):
         proof = self.get_merkle_proof(root, key)
         bits = bytes_to_int(key)
         h = leaf
@@ -93,22 +64,6 @@ class VanillaSMT(object):
             self.db.put(h, hh)
             bits >>= 1
         return h
-
-    def updates(self, root, keys, leaves, batch_size=200):
-        """method prepared for RocksDB-batch-mode
-
-        Just give lists of key and leaf, regardless the size of key/leaf size.
-        They would be appropriately chunked.
-        """
-        chunks = zip(
-            chunk_iterable(keys, batch_size), chunk_iterable(leaves, batch_size)
-        )
-        for keys, leaves in chunks:
-            self.db.init_batch()
-            for key, leaf in zip(keys, leaves):
-                root = self.update(root, key, leaf)
-            self.db.write_batch()
-        return root
 
     def verify_proof(self, root, key, leaf, proof):
         bits = bytes_to_int(key)

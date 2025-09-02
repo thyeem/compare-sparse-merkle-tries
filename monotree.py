@@ -1,39 +1,4 @@
-import hashlib
-import itertools
-
-from database import RocksDB
-
-
-def bytes_to_int(x):
-    return int.from_bytes(x, "big")
-
-
-def int_to_bytes(x, byte=32):
-    return x.to_bytes(byte, "big")
-
-
-def blake2b(nbyte=32):
-    def f(x):
-        return hashlib.blake2b(x, digest_size=nbyte).digest()
-
-    return f
-
-
-def chunk_iterable(iterable, size):
-    it = iter(iterable)
-    while True:
-        chunk = tuple(itertools.islice(it, size))
-        if not chunk:
-            break
-        yield chunk
-
-
-def bytes_to_binstring(x, bit=256):
-    return format(bytes_to_int(x), f"0{bit}b")
-
-
-def binstring_to_bytes(x, byte=32):
-    return int_to_bytes(int(x, 2), byte)
+from utils import *
 
 
 def len_lcp(X, Y):
@@ -80,7 +45,7 @@ def verify_proof(root, key, leaf, proof, hash_fn=blake2b(32)):
     return root == h
 
 
-class Monotree(object):
+class Monotree:
     """A pure-python implementation of Monotree (https://github.com/thyeem/monotree).
 
     Optimization in `monotree` is mainly to compress the path as much as possible
@@ -93,21 +58,19 @@ class Monotree(object):
     01  \x01  [soft | hard] R
     """
 
-    def __init__(self, hash_bytes=32, db=None, hash_fn=None):
-        """RocksDB will be used when not provided 'db' keyword."""
-
-        self.db = db or RocksDB()
+    def __init__(self, hash_bytes=32, hash_fn=None):
         self.HASH_BYTES = hash_bytes
         self.HASH_BITS = hash_bytes << 3
         self.hash_fn = hash_fn or blake2b(hash_bytes)
-        self.nil = b""
+        self.new()
 
     def hash(self, x):
-        return x != self.nil and self.hash_fn(x) or self.nil
+        return x != NIL and self.hash_fn(x) or NIL
 
-    def new_tree(self):
-        self.db.put(self.nil, self.nil)
-        return self.nil
+    def new(self):
+        self.db = Database()
+        self.db.put(NIL, NIL)
+        return NIL
 
     def is_soft_node(self, node):
         return node[-1:] == b"\x00"
@@ -132,7 +95,7 @@ class Monotree(object):
         return Lh, Lb, Rh, Rb
 
     def gen_node(self, h, b, H, B):
-        if H == self.nil and B == self.nil:
+        if H == NIL and B == NIL:
             node = self.encode_soft_node(h, b)
         else:
             Lh, Rh = is_right(b) and (H, h) or (h, H)
@@ -150,11 +113,11 @@ class Monotree(object):
         node = self.db.get(root)
         if self.is_soft_node(node):
             h, b = self.decode_soft_node(node)
-            return h, b, self.nil, self.nil
+            return h, b, NIL, NIL
         if self.is_hard_node(node):
             Lh, Lb, Rh, Rb = self.decode_hard_node(node)
             return is_right(bits) and (Rh, Rb, Lh, Lb) or (Lh, Lb, Rh, Rb)
-        assert False
+        raise ValueError(f"Broken trie, root: {root}")
 
     def put(self, root, bits, leaf):
         h, b, H, B = self.get_node(root, bits)
@@ -170,39 +133,24 @@ class Monotree(object):
             h, b = self.put_node(h, sub_b, leaf, sub_B), b[:n]
         return self.put_node(h, b, H, B)
 
-    def update(self, root, key, leaf):
+    def insert(self, root, key, leaf):
         bits = bytes_to_binstring(key, self.HASH_BITS)
-        if root == self.nil:
-            return self.put_node(leaf, bits, self.nil, self.nil)
+        if root == NIL:
+            return self.put_node(leaf, bits, NIL, NIL)
         else:
             return self.put(root, bits, leaf)
 
-    def updates(self, root, keys, leaves, batch_size=20):
-        """method prepared for RocksDB-batch-mode
-        Just give lists of key and leaf, regardless the size of key/leaf size
-        They would be appropriately chunked
-        """
-        chunks = zip(
-            chunk_iterable(keys, batch_size), chunk_iterable(leaves, batch_size)
-        )
-        for keys, leaves in chunks:
-            self.db.init_batch()
-            for key, leaf in zip(keys, leaves):
-                root = self.update(root, key, leaf)
-            self.db.write_batch()
-        return root
-
-    def get_leaf(self, root, key):
+    def get(self, root, key):
         bits = bytes_to_binstring(key, self.HASH_BITS)
-        return self.get(root, bits)
+        return self.find_key(root, bits)
 
-    def get(self, root, bits):
+    def find_key(self, root, bits):
         h, b, *_ = self.get_node(root, bits)
         n = len_lcp(b, bits)
         if n == len(bits):
             return h
         if n == len(b):
-            return self.get(h, bits[n:])
+            return self.find_key(h, bits[n:])
         return
 
     def encode_proof(self, node, bits):
@@ -218,12 +166,12 @@ class Monotree(object):
                 prefix = b"\x00"
                 cut = node[N:]
         else:
-            assert False
+            raise ValueError(f"Broken trie, root: {root}")
         return prefix, cut
 
     def get_merkle_proof(self, root, key):
         proof = []
-        if root == self.nil:
+        if root == NIL:
             return proof
         bits = bytes_to_binstring(key, self.HASH_BITS)
         return self.get_proof(root, bits, proof)

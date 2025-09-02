@@ -1,6 +1,34 @@
-*.sw?
+# mac
 .DS_Store
-.ipynb_checkpoints/
-__pycache__/
-*.pyc
-*.md.temp
+
+# windows
+Thumbs.db
+
+# emacs
+[#]*[#]
+
+# vim
+*.sw?
+*~
+
+# c/c++ object file
+*.o
+
+# Makefile
+*.d
+
+# haskell
+.stack-work/
+dist-newstyle/
+*.hi
+
+# python
+*.ipynb_checkpoints
+__pycache__
+build/
+dist/
+*egg-info
+.venv
+.env/
+
+# proj

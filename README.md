@@ -4,9 +4,11 @@ Here are three kinds of `Sparse Merkle Tries (SMTs)` I purely implemented in `py
 
 - `Vanilla SMT`, a standard _Sparse Merkle Trie_ without any optimizations.
 
-- `Cached SMT` caches the hash values of each depth of the `Vanilla SMT`. This modification reduces the number of DB accesses for reading.
+- `Cached SMT` caches the hash values of each depth of the `Vanilla SMT`.    
+This modification reduces the number of DB accesses for reading.
 
-- `monotree`, a pure-python implementation of `monotree written in Rust` (https://github.com/thyeem/monotree). Optimization in `monotree` is mainly to compress the path as much as possible to reduce the number of DB accesses in both read and write.
+- [`monotree`](https://github.com/thyeem/compare-sparse-merkle-tries/blob/main/monotree.py), a pure-python implementation of [monotree.rs](https://github.com/thyeem/monotree) (_Rust_).    
+Optimization in `monotree` is mainly to compress the path as much as possible to reduce the number of DB accesses in both read and write.
 
 ## Tl;dr
 (when updating _10,000_ random entries)
